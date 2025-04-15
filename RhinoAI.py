@@ -16,8 +16,8 @@ from Rhino.UI import Dialogs
 import math
 
 # Constants
-OPENAI_MODEL = "gpt-4"
-OPENAI_API_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+# Replace OpenAI endpoint with our Vercel API
+VERCEL_API_ENDPOINT = "rhino-ai-buzzed-technologies.vercel.app"
 DEFAULT_TEMPERATURE = 0.7
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), "RhinoAI_config.json")
 
@@ -146,22 +146,18 @@ def get_api_key():
     
     return api_key
 
-def call_openai_api(prompt, api_key):
-    """Make a request to the OpenAI API and return the response"""
+def call_rhinoai_api(prompt, api_key):
+    """Make a request to our Vercel API and return the response"""
     try:
         # Create the request object
-        request = WebRequest.Create(Uri(OPENAI_API_ENDPOINT))
+        request = WebRequest.Create(Uri(VERCEL_API_ENDPOINT))
         request.Method = "POST"
         request.ContentType = "application/json"
         request.Headers.Add("Authorization", "Bearer " + api_key)
         
         # Prepare the request payload
         payload = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
+            "prompt": prompt,
             "temperature": DEFAULT_TEMPERATURE,
             "max_tokens": 2048
         }
@@ -184,10 +180,10 @@ def call_openai_api(prompt, api_key):
         
         # Parse JSON response
         response_json = json.loads(response_text)
-        return response_json["choices"][0]["message"]["content"]
+        return response_json["result"]
     
     except Exception as e:
-        error_msg = "Error calling OpenAI API: {}\n{}".format(str(e), traceback.format_exc())
+        error_msg = "Error calling RhinoAI API: {}\n{}".format(str(e), traceback.format_exc())
         print(error_msg)
         return None
 
@@ -248,40 +244,30 @@ def rhinoai_command():
         print("API key is required to use RhinoAI")
         return
     
-    # Get file context
-    file_context = get_file_context()
+    # Get context information about the file
+    context = get_file_context()
     
-    # Use a custom input box to allow spaces
-    user_prompt = rs.StringBox("Enter your modeling prompt", "", "RhinoAI Prompt")
-    if not user_prompt:
+    # Get user prompt
+    prompt = rs.GetString("Enter your RhinoAI prompt (or 'cancel' to exit)")
+    if not prompt or prompt.lower() == "cancel":
         return
     
-    # Combine user prompt with file context
-    full_prompt = "{}\n{}".format(file_context, user_prompt)
+    # Enhance the prompt with context information
+    enhanced_prompt = context + "\n\nUser request: " + prompt
+    print("Sending prompt to RhinoAI API...")
     
-    print("Processing: '{}'".format(full_prompt))
+    # Call the API
+    code = call_rhinoai_api(enhanced_prompt, api_key)
+    if not code:
+        print("Failed to get a response from the API")
+        return
     
-    # Call OpenAI API
-    print("Contacting OpenAI, please wait...")
-    response = call_openai_api(full_prompt, api_key)
-    
-    if response:
-        # Print the AI's response
-        print("\nAI Response:")
-        print("=" * 40)
-        print(response)
-        print("=" * 40 + "\n")
-        
-        # Execute the generated code
-        print("Executing generated code...")
-        success = execute_python_code(response)
-        
-        if success:
-            print("Model generation complete")
-        else:
-            print("Failed to execute generated code")
+    # Execute the code
+    print("Got response from the API, executing code...")
+    if execute_python_code(code):
+        print("Successfully executed the generated code")
     else:
-        print("Failed to get response from OpenAI")
+        print("Failed to execute the generated code")
 
 # Register the RhinoAI command
 if __name__ == "__main__":
